@@ -1,19 +1,38 @@
-using System.ComponentModel.DataAnnotations;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace TicketBackend.Models;
 
 public class Ticket
 {
-    [Key]
+    [BsonId]
+    [BsonRepresentation(BsonType.ObjectId)]
     public string? Id { get; set; } 
-    public string? TicketId { get; set; }
-    public string? TicketType { get; set; }
-    public string EventId { get; set; } = string.Empty; 
-    public int Quantity { get; set; }  
-    public string FullName { get; set; } = string.Empty;
-    public string UserName { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public DateTime PurchasedAt { get; set; } = DateTime.Now;
 
-    public Event? Event { get; set; }
+    [BsonElement("ticketId")]
+    public string? TicketId { get; set; }
+
+    [BsonElement("ticketType")]
+    public string? TicketType { get; set; }
+
+    [BsonElement("eventId")]
+    public string EventId { get; set; } = string.Empty; 
+
+    [BsonElement("userId")]
+    public string UserId { get; set; } = string.Empty; // 👈 ဤနေရာတွင် ရှိရပါမည်
+
+    [BsonElement("quantity")]
+    public int Quantity { get; set; }  
+
+    [BsonElement("fullName")]
+    public string FullName { get; set; } = string.Empty;
+
+    [BsonElement("userName")]
+    public string UserName { get; set; } = string.Empty;
+
+    [BsonElement("email")]
+    public string Email { get; set; } = string.Empty;
+
+    [BsonElement("purchasedAt")]
+    public DateTime PurchasedAt { get; set; } = DateTime.Now;
 }

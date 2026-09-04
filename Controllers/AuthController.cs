@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 using System.Net;
 using System.Net.Mail;
-using TicketBackend.Data;
 using TicketBackend.DTOs;
 using TicketBackend.Models;
 
@@ -12,136 +11,159 @@ namespace TicketBackend.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IMongoCollection<User> _usersCollection;
         private readonly IConfiguration _configuration;
 
         public AuthController(
-            ApplicationDbContext context,
+            IMongoDatabase database,
             IConfiguration configuration)
         {
-            _context = context;
+            _usersCollection = database.GetCollection<User>("Users");
             _configuration = configuration;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(RegisterDto dto)
-        {
-            if (string.IsNullOrWhiteSpace(dto.Email))
-            {
-                return BadRequest(new { message = "Gmail ထည့်ပေးပါ။" });
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.Password))
-            {
-                return BadRequest(new { message = "Password ထည့်ပေးပါ။" });
-            }
-
-            var email = dto.Email.Trim().ToLower();
-
-            var existingUser = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-
-            if (existingUser != null)
-            {
-                return BadRequest(new { message = "Account already exists!" });
-            }
-
-            var user = new User
-            {
-                FullName = dto.FullName,
-                Email = email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                Role = "User"
-            };
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "အကောင့်ဖွင့်ခြင်း အောင်မြင်ပါသည်။" });
-        }
-
-        [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginDto dto)
-        {
-            if (string.IsNullOrWhiteSpace(dto.Email))
-            {
-                return BadRequest(new { message = "Gmail ထည့်ပေးပါ။" });
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.Password))
-            {
-                return BadRequest(new { message = "Password ထည့်ပေးပါ။" });
-            }
-
-            var email = dto.Email.Trim().ToLower();
-
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-
-            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-            {
-                return BadRequest(new { message = "Gmail သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်။" });
-            }
-
-            var response = new AuthResponseDto
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email,
-                Role = user.Role
-            };
-
-            return Ok(new
-            {
-                message = "Login ဝင်ရောက်ခြင်း အောင်မြင်ပါသည်",
-                user = response
-            });
-        }
-
-        [HttpPost("forgot-password")]
-        public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
+        public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
             try
             {
+                if (dto == null)
+                {
+                    return BadRequest(new { message = "အချက်အလက်များ မမှန်ကန်ပါ။" });
+                }
+
                 if (string.IsNullOrWhiteSpace(dto.Email))
+                {
+                    return BadRequest(new { message = "Gmail ထည့်ပေးပါ။" });
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.Password))
+                {
+                    return BadRequest(new { message = "Password ထည့်ပေးပါ။" });
+                }
+
+                var email = dto.Email.Trim().ToLower();
+
+                var existingUser = await _usersCollection
+                    .Find(u => u.Email.ToLower() == email)
+                    .FirstOrDefaultAsync();
+
+                if (existingUser != null)
+                {
+                    return BadRequest(new { message = "Account already exists!" });
+                }
+
+                var user = new User
+                {
+                    FullName = dto.FullName ?? "User",
+                    Email = email,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                    Role = "User"
+                };
+
+                await _usersCollection.InsertOneAsync(user);
+
+                return Ok(new { message = "အကောင့်ဖွင့်ခြင်း အောင်မြင်ပါသည်။" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Register လုပ်ရာတွင် Error ဖြစ်နေပါသည်။", error = ex.Message });
+            }
+        }
+
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDto dto)
+        {
+            try
+            {
+                if (dto == null)
+                {
+                    return BadRequest(new { message = "အချက်အလက်များ မမှန်ကန်ပါ။" });
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.Email))
+                {
+                    return BadRequest(new { message = "Gmail ထည့်ပေးပါ။" });
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.Password))
+                {
+                    return BadRequest(new { message = "Password ထည့်ပေးပါ။" });
+                }
+
+                var email = dto.Email.Trim().ToLower();
+
+                var user = await _usersCollection
+                    .Find(u => u.Email.ToLower() == email)
+                    .FirstOrDefaultAsync();
+
+                if (user == null || string.IsNullOrEmpty(user.PasswordHash) || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+                {
+                    return BadRequest(new { message = "Gmail သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်။" });
+                }
+
+                var response = new AuthUserResponseDto
+                {
+                    Id = user.Id,
+                    FullName = user.FullName,
+                    Email = user.Email,
+                    Role = user.Role
+                };
+
+                return Ok(new
+                {
+                    message = "Login ဝင်ရောက်ခြင်း အောင်မြင်ပါသည်",
+                    user = response
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Login လုပ်ရာတွင် Error ဖြစ်နေပါသည်။", error = ex.Message });
+            }
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+        {
+            try
+            {
+                if (dto == null || string.IsNullOrWhiteSpace(dto.Email))
                 {
                     return BadRequest(new { message = "Gmail ထည့်ပေးပါ။" });
                 }
 
                 var email = dto.Email.Trim().ToLower();
 
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                var user = await _usersCollection
+                    .Find(u => u.Email.ToLower() == email)
+                    .FirstOrDefaultAsync();
 
                 if (user == null)
                 {
                     return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
                 }
+
                 var otp = Random.Shared.Next(100000, 1000000).ToString();
                 user.OtpCode = otp;
                 user.OtpExpiry = DateTime.UtcNow.AddMinutes(5);
 
-                await _context.SaveChangesAsync();
+                await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 await SendEmailOtpAsync(user.Email, otp);
 
                 return Ok(new { message = "OTP ကုဒ်ကို သင့် Gmail ထဲသို့ ပို့ပေးလိုက်ပါပြီ!" });
             }
             catch (SmtpException ex)
             {
-                Console.WriteLine("SMTP ERROR:");
-                Console.WriteLine(ex.ToString());
-
+                Console.WriteLine("SMTP ERROR: " + ex.ToString());
                 return StatusCode(500, new
                 {
-                    message = "Connection Lost!Check Your Internet Connection! ",
+                    message = "Connection Lost! Check Your Internet Connection!",
                     error = ex.Message
                 });
             }
             catch (Exception ex)
             {
-                Console.WriteLine("FORGOT PASSWORD ERROR:");
-                Console.WriteLine(ex.ToString());
-
+                Console.WriteLine("FORGOT PASSWORD ERROR: " + ex.ToString());
                 return StatusCode(500, new
                 {
                     message = "Forgot Password လုပ်ရာတွင် Error ဖြစ်နေပါသည်။",
@@ -151,40 +173,48 @@ namespace TicketBackend.Controllers
         }
 
         [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword(VerifyOtpDto dto)
+        public async Task<IActionResult> ResetPassword([FromBody] VerifyOtpDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.OtpCode) || string.IsNullOrWhiteSpace(dto.NewPassword))
+            try
             {
-                return BadRequest(new { message = "အချက်အလက်များ အားလုံး ဖြည့်သွင်းပေးပါ။" });
+                if (dto == null || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.OtpCode) || string.IsNullOrWhiteSpace(dto.NewPassword))
+                {
+                    return BadRequest(new { message = "အချက်အလက်များ အားလုံး ဖြည့်သွင်းပေးပါ။" });
+                }
+
+                var email = dto.Email.Trim().ToLower();
+
+                var user = await _usersCollection
+                    .Find(u => u.Email.ToLower() == email)
+                    .FirstOrDefaultAsync();
+
+                if (user == null)
+                {
+                    return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
+                }
+
+                if (user.OtpCode != dto.OtpCode)
+                {
+                    return BadRequest(new { message = "OTP ကုဒ် မှားယွင်းနေပါသည်။" });
+                }
+
+                if (user.OtpExpiry == null || user.OtpExpiry < DateTime.UtcNow)
+                {
+                    return BadRequest(new { message = "OTP ကုဒ် သက်တမ်းကုန်သွားပါပြီ။ OTP အသစ်တောင်းပါ။" });
+                }
+
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+                user.OtpCode = null;
+                user.OtpExpiry = null;
+
+                await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
+
+                return Ok(new { message = "စကားဝှက်အသစ် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!" });
             }
-
-            var email = dto.Email.Trim().ToLower();
-
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email.ToLower() == email);
-
-            if (user == null)
+            catch (Exception ex)
             {
-                return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
+                return StatusCode(500, new { message = "Reset Password လုပ်ရာတွင် Error ဖြစ်နေပါသည်။", error = ex.Message });
             }
-
-            if (user.OtpCode != dto.OtpCode)
-            {
-                return BadRequest(new { message = "OTP ကုဒ် မှားယွင်းနေပါသည်။" });
-            }
-
-            if (user.OtpExpiry == null || user.OtpExpiry < DateTime.UtcNow)
-            {
-                return BadRequest(new { message = "OTP ကုဒ် သက်တမ်းကုန်သွားပါပြီ။ OTP အသစ်တောင်းပါ။" });
-            }
-
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
-            user.OtpCode = null;
-            user.OtpExpiry = null;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "စကားဝှက်အသစ် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!" });
         }
 
         private async Task SendEmailOtpAsync(string toEmail, string otpCode)

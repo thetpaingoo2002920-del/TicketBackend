@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TicketBackend.Data;
+using MongoDB.Driver;
 using TicketBackend.Models;
 
 namespace TicketBackend.Controllers
@@ -9,11 +8,13 @@ namespace TicketBackend.Controllers
     [ApiController]
     public class TicketsController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IMongoCollection<Ticket> _ticketsCollection;
+        private readonly IMongoCollection<Event> _eventsCollection;
 
-        public TicketsController(ApplicationDbContext context)
+        public TicketsController(IMongoDatabase database)
         {
-            _context = context;
+            _ticketsCollection = database.GetCollection<Ticket>("Tickets");
+            _eventsCollection = database.GetCollection<Event>("Events");
         }
 
         [HttpGet]
@@ -21,10 +22,23 @@ namespace TicketBackend.Controllers
         {
             try
             {
-                var tickets = await _context.Tickets
-                    .Include(t => t.Event) 
-                    .OrderByDescending(t => t.Id)
-                    .Select(t => new {
+                var tickets = await _ticketsCollection.Find(_ => true)
+                    .SortByDescending(t => t.Id)
+                    .ToListAsync();
+
+                var events = await _eventsCollection.Find(_ => true).ToListAsync();
+                
+                var eventDict = events
+                    .Where(e => !string.IsNullOrEmpty(e.Id))
+                    .ToDictionary(e => e.Id!, e => e);
+
+                var result = tickets.Select(t => {
+                    Event? evt = null;
+                    if (!string.IsNullOrEmpty(t.EventId))
+                    {
+                        eventDict.TryGetValue(t.EventId, out evt);
+                    }
+                    return new {
                         id = t.Id,
                         ticketId = t.TicketId,
                         ticketType = t.TicketType,
@@ -33,15 +47,16 @@ namespace TicketBackend.Controllers
                         fullName = t.FullName,
                         userName = t.UserName,
                         email = t.Email,
+                        userId = t.UserId,
                         eventId = t.EventId,
-                        eventTitle = t.Event != null ? t.Event.Title : "ပွဲအမည်မရှိပါ",
-                        venue = t.Event != null ? t.Event.Venue : "တောင်ကြီးမြို့",
-                        ticketPrice = t.Event != null ? t.Event.TicketPrice : 0,
-                        totalPrice = (t.Event != null ? t.Event.TicketPrice : 0) * t.Quantity
-                    })
-                    .ToListAsync();
+                        eventTitle = evt != null ? evt.Title : "ပွဲအမည်မရှိပါ",
+                        venue = evt != null ? evt.Venue : "တောင်ကြီးမြို့",
+                        ticketPrice = evt != null ? evt.TicketPrice : 0,
+                        totalPrice = (evt != null ? evt.TicketPrice : 0) * t.Quantity
+                    };
+                });
 
-                return Ok(tickets);
+                return Ok(result);
             }
             catch (Exception ex)
             {
@@ -49,16 +64,28 @@ namespace TicketBackend.Controllers
             }
         }
 
-        [HttpGet("user/{email}")]
-        public async Task<IActionResult> GetUserTickets(string email)
+        [HttpGet("user/{identifier}")]
+        public async Task<IActionResult> GetUserTickets(string identifier)
         {
             try
             {
-                var tickets = await _context.Tickets
-                    .Include(t => t.Event)
-                    .Where(t => t.Email == email)
-                    .OrderByDescending(t => t.PurchasedAt)
-                    .Select(t => new {
+                var tickets = await _ticketsCollection.Find(t => t.Email == identifier || t.UserId == identifier)
+                    .SortByDescending(t => t.PurchasedAt)
+                    .ToListAsync();
+
+                var events = await _eventsCollection.Find(_ => true).ToListAsync();
+                
+                var eventDict = events
+                    .Where(e => !string.IsNullOrEmpty(e.Id))
+                    .ToDictionary(e => e.Id!, e => e);
+
+                var result = tickets.Select(t => {
+                    Event? evt = null;
+                    if (!string.IsNullOrEmpty(t.EventId))
+                    {
+                        eventDict.TryGetValue(t.EventId, out evt);
+                    }
+                    return new {
                         id = t.Id,
                         ticketId = t.TicketId,
                         ticketType = t.TicketType,
@@ -67,15 +94,16 @@ namespace TicketBackend.Controllers
                         fullName = t.FullName,
                         userName = t.UserName,
                         email = t.Email,
+                        userId = t.UserId,
                         eventId = t.EventId,
-                        eventTitle = t.Event != null ? t.Event.Title : "ပွဲအမည်မရှိပါ",
-                        venue = t.Event != null ? t.Event.Venue : "တောင်ကြီးမြို့",
-                        ticketPrice = t.Event != null ? t.Event.TicketPrice : 0,
-                        totalPrice = (t.Event != null ? t.Event.TicketPrice : 0) * t.Quantity
-                    })
-                    .ToListAsync();
+                        eventTitle = evt != null ? evt.Title : "ပွဲအမည်မရှိပါ",
+                        venue = evt != null ? evt.Venue : "တောင်ကြီးမြို့",
+                        ticketPrice = evt != null ? evt.TicketPrice : 0,
+                        totalPrice = (evt != null ? evt.TicketPrice : 0) * t.Quantity
+                    };
+                });
 
-                return Ok(tickets);
+                return Ok(result);
             }
             catch (Exception ex)
             {
@@ -93,13 +121,17 @@ namespace TicketBackend.Controllers
                     return BadRequest(new { success = false, message = "Ticket ID လိုအပ်ပါသည်။" });
                 }
 
-                var ticket = await _context.Tickets
-                    .Include(t => t.Event)
-                    .FirstOrDefaultAsync(t => t.TicketId == model.TicketId);
+                var ticket = await _ticketsCollection.Find(t => t.TicketId == model.TicketId).FirstOrDefaultAsync();
 
                 if (ticket == null)
                 {
                     return NotFound(new { success = false, message = "ဤ Ticket ID မှာ မှားယွင်းနေပါသည် သို့မဟုတ် မရှိပါ။" });
+                }
+
+                Event? evt = null;
+                if (!string.IsNullOrEmpty(ticket.EventId))
+                {
+                    evt = await _eventsCollection.Find(e => e.Id == ticket.EventId).FirstOrDefaultAsync();
                 }
 
                 return Ok(new
@@ -109,7 +141,7 @@ namespace TicketBackend.Controllers
                     ticket = new
                     {
                         ticketId = ticket.TicketId,
-                        eventTitle = ticket.Event != null ? ticket.Event.Title : "ပွဲအမည်မရှိပါ",
+                        eventTitle = evt != null ? evt.Title : "ပွဲအမည်မရှိပါ",
                         userName = ticket.UserName ?? ticket.FullName,
                         email = ticket.Email,
                         ticketType = ticket.TicketType,
@@ -133,14 +165,8 @@ namespace TicketBackend.Controllers
                     return BadRequest(new { success = false, message = "Invalid data received" });
                 }
 
-                int parsedEventId = 0;
-                if (model.EventId != null)
-                {
-                    int.TryParse(model.EventId.ToString(), out parsedEventId);
-                }
-
-                var eventsList = await _context.Events.ToListAsync();
-                var targetEvent = eventsList.FirstOrDefault(e => e.Id == parsedEventId);
+                string eventIdStr = model.EventId?.ToString() ?? string.Empty;
+                var targetEvent = await _eventsCollection.Find(e => e.Id == eventIdStr).FirstOrDefaultAsync();
 
                 if (targetEvent == null)
                 {
@@ -153,23 +179,22 @@ namespace TicketBackend.Controllers
                 }
 
                 targetEvent.AvailableTickets -= model.Quantity;
-                _context.Entry(targetEvent).State = EntityState.Modified;
+                await _eventsCollection.ReplaceOneAsync(e => e.Id == targetEvent.Id, targetEvent);
 
                 var ticket = new Ticket
                 {
                     TicketId = model.TicketId ?? "TKT-" + new Random().Next(100000, 999999),
-                    EventId = targetEvent.Id.ToString(), 
+                    EventId = targetEvent.Id ?? string.Empty, 
+                    UserId = model.UserId ?? string.Empty, 
                     TicketType = model.TicketType ?? "Normal",
                     Quantity = model.Quantity > 0 ? model.Quantity : 1,
                     FullName = model.FullName ?? "User",
                     UserName = model.UserName ?? "User",
                     Email = model.Email ?? "user@github.com",
-                    PurchasedAt = DateTime.Now,
-                    Event = null 
+                    PurchasedAt = DateTime.Now
                 };
 
-                _context.Tickets.Add(ticket);
-                await _context.SaveChangesAsync();
+                await _ticketsCollection.InsertOneAsync(ticket);
 
                 return Ok(new 
                 { 
@@ -180,12 +205,10 @@ namespace TicketBackend.Controllers
             }
             catch (Exception ex)
             {
-                var innerMsg = ex.InnerException != null ? ex.InnerException.Message : "No inner exception";
                 return StatusCode(500, new { 
                     success = false, 
                     message = "Error saving ticket", 
-                    error = ex.Message, 
-                    innerError = innerMsg 
+                    error = ex.Message 
                 });
             }
         }
@@ -195,14 +218,11 @@ namespace TicketBackend.Controllers
         {
             try
             {
-                var ticket = await _context.Tickets.FindAsync(id);
-                if (ticket == null)
+                var result = await _ticketsCollection.DeleteOneAsync(t => t.Id == id);
+                if (result.DeletedCount == 0)
                 {
                     return NotFound(new { success = false, message = "Ticket not found" });
                 }
-
-                _context.Tickets.Remove(ticket);
-                await _context.SaveChangesAsync();
 
                 return NoContent();
             }
@@ -221,7 +241,8 @@ namespace TicketBackend.Controllers
     public class TicketDto
     {
         public string? TicketId { get; set; }
-        public object? EventId { get; set; } 
+        public object? EventId { get; set; } // 👈 ကျသွားသည့် syntax အမှားကို ပြင်ဆင်ပြီး
+        public string? UserId { get; set; }
         public string? TicketType { get; set; }
         public int Quantity { get; set; }
         public string? FullName { get; set; }

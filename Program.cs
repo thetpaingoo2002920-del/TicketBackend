@@ -1,16 +1,30 @@
-using Microsoft.EntityFrameworkCore;
-using TicketBackend.Data;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    ));
+// MongoDB Service Configuration (MongoDB.Driver)
+// appsettings.json ထဲမှ ConnectionString (သို့မဟုတ်) Environment Variable ကို ချိတ်ဆက်ပေးခြင်း
+builder.Services.AddSingleton<IMongoClient>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration.GetConnectionString("MongoConnection") ?? "mongodb://localhost:27017";
+    return new MongoClient(connectionString);
+});
+
+builder.Services.AddScoped<IMongoDatabase>(sp =>
+{
+    var client = sp.GetRequiredService<IMongoClient>();
+    // Database နာမည်ကို သင့်ပရောဂျက်အတွက် လိုအပ်သလို ပေးနိုင်ပါသည် (ဥပမာ - TicketDb)
+    return client.GetDatabase("TicketDb");
+});
+
+// CORS Policy Configuration for Vue.js Frontend
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
@@ -23,6 +37,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -31,6 +46,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// CORS must be placed before UseAuthorization and MapControllers
 app.UseCors("FrontendPolicy");
 
 app.UseAuthorization();
