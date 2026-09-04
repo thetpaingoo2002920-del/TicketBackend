@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Environment variables (အရေးကြီးတဲ့ API keys နဲ့ pass တွေပါတဲ့ .env ဖိုင်များကို ဖယ်ရန်)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files (Local Database ဖိုင်များ ပါလာပါက ဖယ်ရန်)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDEs and Editors (VS Code / WebStorm config များကို ဖယ်ရန်)
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
