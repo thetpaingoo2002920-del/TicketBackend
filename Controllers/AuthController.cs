@@ -148,6 +148,8 @@ namespace TicketBackend.Controllers
                 user.OtpExpiry = DateTime.UtcNow.AddMinutes(5);
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
+                
+                // Try sending email
                 await SendEmailOtpAsync(user.Email, otp);
 
                 return Ok(new { message = "OTP ကုဒ်ကို သင့် Gmail ထဲသို့ ပို့ပေးလိုက်ပါပြီ!" });
@@ -157,7 +159,7 @@ namespace TicketBackend.Controllers
                 Console.WriteLine("SMTP ERROR: " + ex.ToString());
                 return StatusCode(500, new
                 {
-                    message = "Connection Lost! Check Your Internet Connection!",
+                    message = "SMTP Email ပို့မရပါ။ App Password သို့မဟုတ် Network ကို စစ်ဆေးပါ။",
                     error = ex.Message
                 });
             }
@@ -227,7 +229,8 @@ namespace TicketBackend.Controllers
                 Credentials = new NetworkCredential(senderEmail, appPassword),
                 EnableSsl = true,
                 UseDefaultCredentials = false,
-                DeliveryMethod = SmtpDeliveryMethod.Network
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Timeout = 20000 // Timeout 20 seconds ထည့်ပေးထားသည်
             };
 
             using var mailMessage = new MailMessage
