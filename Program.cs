@@ -42,7 +42,7 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty; 
 });
 
-// Important: UseCors must be placed before UseAuthorization and MapControllers
+// CORS must be placed before Authorization and MapControllers
 app.UseCors("FrontendPolicy");
 
 app.UseAuthorization();
