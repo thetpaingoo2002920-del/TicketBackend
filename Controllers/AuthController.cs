@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
-using System.Net;
-using System.Net.Mail;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using TicketBackend.DTOs;
 using TicketBackend.Models;
 
@@ -149,8 +150,8 @@ namespace TicketBackend.Controllers
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 
-                // Send email via Gmail SMTP
-                bool isEmailSent = await SendEmailViaGmailAsync(user.Email, otp);
+                // Send email via Brevo API
+                bool isEmailSent = await SendEmailViaBrevoAsync(user.Email, otp);
 
                 if (!isEmailSent)
                 {
@@ -215,18 +216,20 @@ namespace TicketBackend.Controllers
             }
         }
 
-        private async Task<bool> SendEmailViaGmailAsync(string toEmail, string otpCode)
+        private async Task<bool> SendEmailViaBrevoAsync(string toEmail, string otpCode)
         {
             try
             {
-                var smtpUser = _configuration["GmailUser"] ?? "thetpaingoo2002920@gmail.com";
-                var smtpPass = _configuration["GmailPassword"]; // Gmail App Password (16 digits)
-
-                using var client = new SmtpClient("smtp.gmail.com", 587)
+                var apiKey = _configuration["BREVO_API_KEY"]; 
+                if (string.IsNullOrEmpty(apiKey))
                 {
-                    Credentials = new NetworkCredential(smtpUser, smtpPass),
-                    EnableSsl = true
-                };
+                    Console.WriteLine("BREVO_API_KEY is missing in configuration.");
+                    return false;
+                }
+
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("api-key", apiKey);
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
 
                 var emailBody = $@"
 <html>
@@ -243,22 +246,30 @@ namespace TicketBackend.Controllers
 </body>
 </html>";
 
-                var mailMessage = new MailMessage
+                var payload = new
                 {
-                    From = new MailAddress(smtpUser, "Ticket System App"),
-                    Subject = "Ticket System - Password Reset OTP",
-                    Body = emailBody,
-                    IsBodyHtml = true
+                    sender = new { name = "Ticket System App", email = "thetpaingoo2002920@gmail.com" }, // သင်၏ Brevo တွင် အသုံးပြုသော သို့မဟုတ် Verified ဖြစ်ထားသော Email
+                    to = new[] { new { email = toEmail.Trim() } },
+                    subject = "Ticket System - Password Reset OTP",
+                    htmlContent = emailBody
                 };
 
-                mailMessage.To.Add(toEmail.Trim());
+                var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-                await client.SendMailAsync(mailMessage);
+                var response = await client.PostAsync("https://api.brevo.com/v3/smtp/email", content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorResponse = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine("BREVO API ERROR: " + errorResponse);
+                    return false;
+                }
+
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GMAIL SMTP EXCEPTION: " + ex.ToString());
+                Console.WriteLine("BREVO EXCEPTION: " + ex.ToString());
                 return false;
             }
         }
