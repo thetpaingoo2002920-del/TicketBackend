@@ -35,15 +35,16 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+
+// CORS must be placed at the very beginning of the pipeline
+app.UseCors("FrontendPolicy");
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Ticket Backend API V1");
     c.RoutePrefix = string.Empty; 
 });
-
-// CORS must be placed before Authorization and MapControllers
-app.UseCors("FrontendPolicy");
 
 app.UseAuthorization();
 
