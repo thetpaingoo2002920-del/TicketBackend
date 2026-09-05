@@ -7,6 +7,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// MongoDB Configuration
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -20,6 +21,7 @@ builder.Services.AddScoped<IMongoDatabase>(sp =>
     return client.GetDatabase("TicketDb");
 });
 
+// CORS Configuration
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
@@ -32,6 +34,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Configure the HTTP request pipeline.
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -39,11 +42,11 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty; 
 });
 
-// ❌ HttpsRedirection ကို Render တွင် Proxy သုံးနေသောကြောင့် ဖြုတ်ထားပါသည်
-// app.UseHttpsRedirection();
-
+// Important: UseCors must be placed before UseAuthorization and MapControllers
 app.UseCors("FrontendPolicy");
+
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();
