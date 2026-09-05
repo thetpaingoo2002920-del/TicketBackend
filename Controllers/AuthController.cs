@@ -150,8 +150,8 @@ namespace TicketBackend.Controllers
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 
-                // Send email via Brevo API
-                bool isEmailSent = await SendEmailViaBrevoAsync(user.Email, otp);
+                // Send email via Resend API
+                bool isEmailSent = await SendEmailViaResendAsync(user.Email, otp);
 
                 if (!isEmailSent)
                 {
@@ -216,19 +216,19 @@ namespace TicketBackend.Controllers
             }
         }
 
-        private async Task<bool> SendEmailViaBrevoAsync(string toEmail, string otpCode)
+        private async Task<bool> SendEmailViaResendAsync(string toEmail, string otpCode)
         {
             try
             {
-                var apiKey = _configuration["BREVO_API_KEY"]; 
+                var apiKey = _configuration["RESEND_API_KEY"]; 
                 if (string.IsNullOrEmpty(apiKey))
                 {
-                    Console.WriteLine("BREVO_API_KEY is missing in configuration.");
+                    Console.WriteLine("RESEND_API_KEY is missing in configuration.");
                     return false;
                 }
 
                 using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("api-key", apiKey);
+                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
 
                 var emailBody = $@"
@@ -248,20 +248,20 @@ namespace TicketBackend.Controllers
 
                 var payload = new
                 {
-                    sender = new { name = "Ticket System App", email = "thetpaingoo2002920@gmail.com" }, // သင်၏ Brevo တွင် အသုံးပြုသော သို့မဟုတ် Verified ဖြစ်ထားသော Email
-                    to = new[] { new { email = toEmail.Trim() } },
+                    from = "Ticket System <onboarding@resend.dev>",
+                    to = new[] { toEmail.Trim() },
                     subject = "Ticket System - Password Reset OTP",
-                    htmlContent = emailBody
+                    html = emailBody
                 };
 
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-                var response = await client.PostAsync("https://api.brevo.com/v3/smtp/email", content);
+                var response = await client.PostAsync("https://api.resend.com/emails", content);
 
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorResponse = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine("BREVO API ERROR: " + errorResponse);
+                    Console.WriteLine("RESEND API ERROR: " + errorResponse);
                     return false;
                 }
 
@@ -269,7 +269,7 @@ namespace TicketBackend.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine("BREVO EXCEPTION: " + ex.ToString());
+                Console.WriteLine("RESEND EXCEPTION: " + ex.ToString());
                 return false;
             }
         }
