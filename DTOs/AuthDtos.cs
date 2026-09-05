@@ -52,7 +52,7 @@ namespace TicketBackend.DTOs
         public string Email { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "OTP ကုဒ် ထည့်ရန် လိုအပ်ပါသည်။")]
-        [JsonPropertyName("otp")] // Frontend က 'otp' လို့ ပို့တာကို လက်ခံရန်
+        [JsonPropertyName("otpCode")] 
         public string OtpCode { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Password အသစ် ထည့်ရန် လိုအပ်ပါသည်။")]
