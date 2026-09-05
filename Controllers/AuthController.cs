@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
-using System.Net;
-using System.Net.Mail;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using TicketBackend.DTOs;
 using TicketBackend.Models;
 
@@ -149,19 +150,15 @@ namespace TicketBackend.Controllers
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 
-                // Try sending email via SMTP
-                await SendEmailOtpAsync(user.Email, otp);
+                // Send email via Brevo HTTP API
+                bool isEmailSent = await SendEmailViaBrevoAsync(user.Email, otp);
+
+                if (!isEmailSent)
+                {
+                    return StatusCode(500, new { message = "Email ပို့၍ မအောင်မြင်ပါ။ ကျေးဇူးပြု၍ ခဏနေ ပြန်ကြိုးစားပါ။" });
+                }
 
                 return Ok(new { message = "OTP ကုဒ်ကို သင့် Gmail ထဲသို့ ပို့ပေးလိုက်ပါပြီ!" });
-            }
-            catch (SmtpException ex)
-            {
-                Console.WriteLine("SMTP ERROR: " + ex.ToString());
-                return StatusCode(500, new
-                {
-                    message = "Render Free Tier တွင် SMTP Ports (587) ကို ပိတ်ထားသောကြောင့် Email ပို့မရပါ။ Paid Plan သို့မဟုတ် HTTP Email API ကို ပြောင်းသုံးပါ။",
-                    error = ex.Message
-                });
             }
             catch (Exception ex)
             {
@@ -192,7 +189,7 @@ namespace TicketBackend.Controllers
 
                 if (user == null)
                 {
-                    return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
+                    return BadRequest(new { message = "ဒီ Gmail အਕောင့် ရှာမတွေ့ပါ။" });
                 }
 
                 if (user.OtpCode != dto.OtpCode)
@@ -219,25 +216,20 @@ namespace TicketBackend.Controllers
             }
         }
 
-        private async Task SendEmailOtpAsync(string toEmail, string otpCode)
+        private async Task<bool> SendEmailViaBrevoAsync(string toEmail, string otpCode)
         {
-            var senderEmail = "thetpaingoo2002920@gmail.com";
-            var appPassword = "lyhfgnlhtjihwwzg";
-
-            using var smtpClient = new SmtpClient("smtp.gmail.com", 587)
+            try
             {
-                Credentials = new NetworkCredential(senderEmail, appPassword),
-                EnableSsl = true,
-                UseDefaultCredentials = false,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                Timeout = 20000
-            };
+                // Render Environment Variables မှ Brevo API Key ကို ယူမည်
+                var apiKey = _configuration["BrevoApiKey"];
+                var senderEmail = "thetpaingoo2002920@gmail.com"; 
+                var senderName = "Ticket System App";
 
-            using var mailMessage = new MailMessage
-            {
-                From = new MailAddress(senderEmail, "Ticket System App"),
-                Subject = "Ticket System - Password Reset OTP",
-                Body = $@"
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.Add("api-key", apiKey);
+
+                var emailBody = $@"
 <html>
 <body style='font-family: Arial, sans-serif;'>
     <div style='max-width: 600px; margin: auto; padding: 30px; background-color: #f4f4f5; border-radius: 12px;'>
@@ -250,13 +242,35 @@ namespace TicketBackend.Controllers
         <p style='color: #6b7280; font-size: 13px;'>မိမိမှ Password Reset တောင်းဆိုခြင်း မဟုတ်ပါက ဤ Email ကို လျစ်လျူရှုနိုင်ပါတယ်။</p>
     </div>
 </body>
-</html>
-",
-                IsBodyHtml = true
-            };
+</html>";
 
-            mailMessage.To.Add(toEmail.Trim());
-            await smtpClient.SendMailAsync(mailMessage);
+                var payload = new
+                {
+                    sender = new { name = senderName, email = senderEmail },
+                    to = new[] { new { email = toEmail.Trim() } },
+                    subject = "Ticket System - Password Reset OTP",
+                    htmlContent = emailBody
+                };
+
+                var jsonContent = JsonSerializer.Serialize(payload);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync("https://api.brevo.com/v3/smtp/email", content);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorResponse = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine("BREVO API ERROR: " + errorResponse);
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SEND EMAIL EXCEPTION: " + ex.ToString());
+                return false;
+            }
         }
     }
 }
