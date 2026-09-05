@@ -150,7 +150,6 @@ namespace TicketBackend.Controllers
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 
-                // Send email via Resend API
                 bool isEmailSent = await SendEmailViaResendAsync(user.Email, otp);
 
                 if (!isEmailSent)
@@ -171,8 +170,48 @@ namespace TicketBackend.Controllers
             }
         }
 
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpDto dto)
+        {
+            try
+            {
+                if (dto == null || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.OtpCode))
+                {
+                    return BadRequest(new { message = "အချက်အလက်များ အားလုံး ဖြည့်သွင်းပေးပါ။" });
+                }
+
+                var email = dto.Email.Trim().ToLower();
+
+                var user = await _usersCollection
+                    .Find(u => u.Email.ToLower() == email)
+                    .FirstOrDefaultAsync();
+
+                if (user == null)
+                {
+                    return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
+                }
+
+                if (user.OtpCode?.Trim() != dto.OtpCode.Trim())
+                {
+                    return BadRequest(new { message = "OTP ကုဒ် မှားယွင်းနေပါသည်။" });
+                }
+
+                if (user.OtpExpiry == null || user.OtpExpiry < DateTime.UtcNow)
+                {
+                    return BadRequest(new { message = "OTP ကုဒ် သက်တမ်းကုန်သွားပါပြီ။ OTP အသစ်တောင်းပါ။" });
+                }
+
+                return Ok(new { message = "OTP ကုဒ် မှန်ကန်ပါသည်။" });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("VERIFY OTP ERROR: " + ex.ToString());
+                return StatusCode(500, new { message = "OTP စစ်ဆေးရာတွင် Error ဖြစ်နေပါသည်။", error = ex.Message });
+            }
+        }
+
         [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] VerifyOtpDto dto)
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
             try
             {
@@ -192,7 +231,7 @@ namespace TicketBackend.Controllers
                     return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
                 }
 
-                if (user.OtpCode != dto.OtpCode)
+                if (user.OtpCode?.Trim() != dto.OtpCode.Trim())
                 {
                     return BadRequest(new { message = "OTP ကုဒ် မှားယွင်းနေပါသည်။" });
                 }
@@ -212,6 +251,7 @@ namespace TicketBackend.Controllers
             }
             catch (Exception ex)
             {
+                Console.WriteLine("RESET PASSWORD ERROR: " + ex.ToString());
                 return StatusCode(500, new { message = "Reset Password လုပ်ရာတွင် Error ဖြစ်နေပါသည်။", error = ex.Message });
             }
         }

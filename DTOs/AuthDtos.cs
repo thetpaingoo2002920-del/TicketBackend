@@ -41,6 +41,16 @@ namespace TicketBackend.DTOs
 
         [Required(ErrorMessage = "OTP ကုဒ် ထည့်ရန် လိုအပ်ပါသည်။")]
         public string OtpCode { get; set; } = string.Empty;
+    }
+
+    public class ResetPasswordDto
+    {
+        [Required(ErrorMessage = "Email ထည့်ရန် လိုအပ်ပါသည်။")]
+        [EmailAddress(ErrorMessage = "Email ပုံစံ မှန်ကန်မှု မရှိပါ။")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "OTP ကုဒ် ထည့်ရန် လိုအပ်ပါသည်။")]
+        public string OtpCode { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Password အသစ် ထည့်ရန် လိုအပ်ပါသည်။")]
         [MinLength(6, ErrorMessage = "Password သည် အနည်းဆုံး 6 လုံး ရှိရပါမည်။")]
