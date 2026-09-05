@@ -189,7 +189,7 @@ namespace TicketBackend.Controllers
 
                 if (user == null)
                 {
-                    return BadRequest(new { message = "ဒီ Gmail အਕောင့် ရှာမတွေ့ပါ။" });
+                    return BadRequest(new { message = "ဒီ Gmail အကောင့် ရှာမတွေ့ပါ။" });
                 }
 
                 if (user.OtpCode != dto.OtpCode)
@@ -220,7 +220,6 @@ namespace TicketBackend.Controllers
         {
             try
             {
-                // Render Environment Variables မှ Brevo API Key ကို ယူမည်
                 var apiKey = _configuration["BrevoApiKey"];
                 var senderEmail = "thetpaingoo2002920@gmail.com"; 
                 var senderName = "Ticket System App";
