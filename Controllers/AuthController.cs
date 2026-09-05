@@ -149,7 +149,7 @@ namespace TicketBackend.Controllers
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 
-                // Try sending email
+                // Try sending email via SMTP
                 await SendEmailOtpAsync(user.Email, otp);
 
                 return Ok(new { message = "OTP ကုဒ်ကို သင့် Gmail ထဲသို့ ပို့ပေးလိုက်ပါပြီ!" });
@@ -159,7 +159,7 @@ namespace TicketBackend.Controllers
                 Console.WriteLine("SMTP ERROR: " + ex.ToString());
                 return StatusCode(500, new
                 {
-                    message = "SMTP Email ပို့မရပါ။ App Password သို့မဟုတ် Network ကို စစ်ဆေးပါ။",
+                    message = "Render Free Tier တွင် SMTP Ports (587) ကို ပိတ်ထားသောကြောင့် Email ပို့မရပါ။ Paid Plan သို့မဟုတ် HTTP Email API ကို ပြောင်းသုံးပါ။",
                     error = ex.Message
                 });
             }
@@ -230,7 +230,7 @@ namespace TicketBackend.Controllers
                 EnableSsl = true,
                 UseDefaultCredentials = false,
                 DeliveryMethod = SmtpDeliveryMethod.Network,
-                Timeout = 20000 // Timeout 20 seconds ထည့်ပေးထားသည်
+                Timeout = 20000
             };
 
             using var mailMessage = new MailMessage
@@ -255,7 +255,7 @@ namespace TicketBackend.Controllers
                 IsBodyHtml = true
             };
 
-            mailMessage.To.Add(toEmail);
+            mailMessage.To.Add(toEmail.Trim());
             await smtpClient.SendMailAsync(mailMessage);
         }
     }
