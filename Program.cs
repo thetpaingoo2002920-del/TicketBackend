@@ -2,12 +2,11 @@ using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// MongoDB Configuration
+
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -21,7 +20,6 @@ builder.Services.AddScoped<IMongoDatabase>(sp =>
     return client.GetDatabase("TicketDb");
 });
 
-// CORS Configuration
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
@@ -34,9 +32,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-
-// CORS must be placed at the very beginning of the pipeline
 app.UseCors("FrontendPolicy");
 
 app.UseSwagger();
