@@ -1,8 +1,8 @@
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.AspNetCore.Mvc;
+using MimeKit;
 using MongoDB.Driver;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
 using TicketBackend.DTOs;
 using TicketBackend.Models;
 
@@ -150,7 +150,7 @@ namespace TicketBackend.Controllers
 
                 await _usersCollection.ReplaceOneAsync(u => u.Id == user.Id, user);
                 
-                bool isEmailSent = await SendEmailViaResendAsync(user.Email, otp);
+                bool isEmailSent = await SendEmailViaMailKitAsync(user.Email, otp);
 
                 if (!isEmailSent)
                 {
@@ -256,20 +256,27 @@ namespace TicketBackend.Controllers
             }
         }
 
-        private async Task<bool> SendEmailViaResendAsync(string toEmail, string otpCode)
+        private async Task<bool> SendEmailViaMailKitAsync(string toEmail, string otpCode)
         {
             try
             {
-                var apiKey = _configuration["RESEND_API_KEY"]; 
-                if (string.IsNullOrEmpty(apiKey))
+                var server = _configuration["EmailSettings:Server"];
+                var portStr = _configuration["EmailSettings:Port"];
+                var senderEmail = _configuration["EmailSettings:SenderEmail"];
+                var password = _configuration["EmailSettings:Password"];
+
+                if (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(portStr) || string.IsNullOrEmpty(senderEmail) || string.IsNullOrEmpty(password))
                 {
-                    Console.WriteLine("RESEND_API_KEY is missing in configuration.");
+                    Console.WriteLine("EmailSettings configuration is missing in configuration.");
                     return false;
                 }
 
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-                client.DefaultRequestHeaders.Add("Accept", "application/json");
+                int port = int.Parse(portStr);
+
+                var message = new MimeMessage();
+                message.From.Add(new MailboxAddress("Ticket System", senderEmail));
+                message.To.Add(new MailboxAddress("", toEmail.Trim()));
+                message.Subject = "Ticket System - Password Reset OTP";
 
                 var emailBody = $@"
 <html>
@@ -286,30 +293,22 @@ namespace TicketBackend.Controllers
 </body>
 </html>";
 
-                var payload = new
+                message.Body = new TextPart("html")
                 {
-                    from = "Ticket System <onboarding@resend.dev>",
-                    to = new[] { toEmail.Trim() },
-                    subject = "Ticket System - Password Reset OTP",
-                    html = emailBody
+                    Text = emailBody
                 };
 
-                var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-                var response = await client.PostAsync("https://api.resend.com/emails", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorResponse = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine("RESEND API ERROR: " + errorResponse);
-                    return false;
-                }
+                using var client = new SmtpClient();
+                await client.ConnectAsync(server, port, SecureSocketOptions.StartTls);
+                await client.AuthenticateAsync(senderEmail, password);
+                await client.SendAsync(message);
+                await client.DisconnectAsync(true);
 
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("RESEND EXCEPTION: " + ex.ToString());
+                Console.WriteLine("MAILKIT EXCEPTION: " + ex.ToString());
                 return false;
             }
         }
