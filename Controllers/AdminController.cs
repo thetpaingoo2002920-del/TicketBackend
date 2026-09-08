@@ -15,7 +15,6 @@ namespace TicketBackend.Controllers
             _usersCollection = database.GetCollection<User>("Users");
         }
 
-        // ၁။ User အားလုံးကို ယူရန် (Get All Users)
         [HttpGet("users")]
         public async Task<IActionResult> GetAllUsers()
         {
@@ -23,7 +22,7 @@ namespace TicketBackend.Controllers
             {
                 var users = await _usersCollection.Find(_ => true).ToListAsync();
                 
-                // PasswordHash ကို ဖုံးကွယ်ပြီးမှ ပြန်ပို့ရန်
+            
                 var userResponse = users.Select(u => new
                 {
                     id = u.Id,
@@ -39,8 +38,6 @@ namespace TicketBackend.Controllers
                 return StatusCode(500, new { message = "Users များကို ထုတ်ယူရာတွင် Error ဖြစ်နေပါသည်။", error = ex.Message });
             }
         }
-
-        // ၂။ User တစ်ဦး၏ Role ကို ပြောင်းလဲရန် (ဥပမာ Admin လုပ်ရန်)
         [HttpPut("users/{id}/role")]
         public async Task<IActionResult> UpdateUserRole(string id, [FromBody] RoleUpdateDto dto)
         {
